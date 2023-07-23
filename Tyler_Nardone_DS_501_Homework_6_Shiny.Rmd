@@ -1,0 +1,86 @@
+---
+title: "DS 501 - Homework 6"
+author: "Tyler Nardone"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## PGA Tour Golf Data (2015-2022)
+
+Golf -- in particular professional golf played on the PGA Tour -- is an area full of available data, and for this project we will use a data set from Kaggle.com that is a compilation of various player statistics at PGA Tour events between the years 2015 and 2022. 
+
+Some very common statistics are a player's "strokes gained" in various aspects of the game -- for example putting, driving, or approach. In general strokes gained is a measure of a player's performance in a given area, relative to a benchmark measure that is an average of the rest of the players performance in that area. Therefore, a positive value of strokes gained in a particular area means that a player performed better than average, and a negative value means that the player performed worse than average. 
+
+The goal of this project will be to use the strokes gained columns of this particular data set, 6 total unique measurements, and try to predict the finish place (1st, 2nd, 3rd, and so on) using a linear regression model. In this context, a regression model is appropriate because the task at hand will be to predict a numerical value that can take on a range of values, and we would like to predict as close to the actual finish place as possible (as measured by an error function). 
+
+We will seek to minimize an error function by performing some initial data preparation. In particular this project will utilize scaling and principal component analysis to try and make the analysis as robust as possible. As a reader, there will be freedom to select the number of principal components to feed into the regression model, to visualize the corresponding effects on the model's predictions. 
+
+This topic is interesting to me personally because golf is one of my biggest hobbies, and there is a wealth of available data at the professional level.
+
+An RMarkdown analysis showed that the approach described above yielded a normalized RMSE of about 0.12, but as we will see later on the Shiny application did not allow for this calculation to be performed in an interactive manner. 
+
+### Step 1: Load and Prepare Data
+
+First we must load the data and select only the columns that will be relevant to this analysis. 
+
+```{r, eval=T, echo=T, tidy=T}
+library(tidyverse)
+library(corrr)
+library(pls)
+```
+
+```{r, eval=T, echo=T, tidy=T}
+file_path <- "ASA_All_PGA_Raw_Data_Tour_Level.csv"
+
+all_data <- read.csv(file_path)
+
+cols <- c("sg_putt", "sg_arg", "sg_app", "sg_ott", "sg_t2g", "sg_total", "Finish")
+
+raw_df <- all_data %>% select(all_of(cols))
+```
+
+In PGA Tour events, only a select number of players compete in all four rounds of a tournament, and a large number of players are cut after the first two rounds. This outcome shows up as "CUT" in the "Finish" column. In general, only the top 65 lowest scoring players (+/- depending on the particular tournament, and if there are any ties) play all four rounds, our of a total number of 140-160 players. In this data set, there would be no way to differentiate between say the 66th lowest scoring player, and the 150th, since they would both receive a finish of "CUT". Therefore in this analysis, we will not consider any rows where the outcome is "CUT", since there is very likely much more variation in the input columns, and these low placing finishes would not be of much interest anyway.
+
+Other instances where a player may not have a numerical value in the "Finish" column would be due withdrawal or disqualification. 
+
+The next task at hand is to filter out any rows where the "Finish" value is "CUT", "WD", "DQ", etc. (i.e. non-numeric) and to remove any N/A values as well. What is left will be only values that contain a number, or a number with a leading "T" to indicate a tie for that position. 
+
+```{r, eval=T, echo=T, tidy=T}
+finish_values <- raw_df$Finish %>% unique()
+finish_values_num <- finish_values[grep("[0-9]", finish_values)]
+finish_values_non_num <- finish_values[!(finish_values %in% finish_values_num)]
+```
+
+```{r, eval=T, echo=T, tidy=T}
+raw_df <- subset(raw_df, !(raw_df$Finish %in% finish_values_non_num))
+```
+
+It is clear to see that many outcomes contain a leading "T", indicating a tie for that position. These outcomes will be necessary to keep in the analysis, but the leading "T" must be removed so that numerical analysis can be performed.
+
+```{r, eval=T, echo=T, tidy=T}
+raw_df$Finish <- parse_number(raw_df$Finish)
+```
+
+The data is now in a form that is strictly numerical, and can be transformed as needed to feed into a regression model.
+
+### Step 2: Apply Scaling and Principal Component Analysis
+
+Scaling of the data will be done with the standard scale() function.
+
+```{r, eval=T, echo=T, tidy=T}
+scaled_df <- data.frame(scale(raw_df, center=TRUE, scale=TRUE))
+```
+
+With the scaled data frame completed, principal component analysis can be applied.
+
+```{r, eval=T, echo=T, tidy=T}
+corr_matrix <- cor(scaled_df[!names(scaled_df) == "Finish"])
+```
+
+```{r, eval=T, echo=T, tidy=T}
+pca <- princomp(corr_matrix)
+```
+
+
+
+
